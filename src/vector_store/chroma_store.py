@@ -1,137 +1,77 @@
-from typing import List, Dict, Any, Optional
-import chromadb
-from chromadb.config import Settings
+from typing import List, Dict, Any
+import yaml
+from langchain.vectorstores import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from loguru import logger
 
 class ChromaStore:
     def __init__(
         self,
-        collection_name: str = "log_embeddings",
-        persist_directory: str = "./data/vector_store"
+        config_path: str = "config/config.yaml"
     ):
-        """
-        Initialize the ChromaDB vector store.
-        
-        Args:
-            collection_name: Name of the collection to store embeddings
-            persist_directory: Directory to persist the vector store
-        """
-        self.collection_name = collection_name
-        self.persist_directory = persist_directory
-        
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=persist_directory,
-            settings=Settings(
-                anonymized_telemetry=False
-            )
+        # Load config
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        vs_cfg = config['vector_store']
+        emb_cfg = config['embedding']
+        llm_cfg = config['llm']
+        self.collection_name = vs_cfg.get('collection_name', 'log_embeddings')
+        self.persist_directory = vs_cfg.get('persist_directory', './data/vector_store')
+        self.embedding_model = GoogleGenerativeAIEmbeddings(
+            model=emb_cfg.get('model_name', 'models/embedding-001'),
+            google_api_key=llm_cfg.get('api_key')
         )
-        
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"}
+        self.chroma = Chroma(
+            collection_name=self.collection_name,
+            embedding_function=self.embedding_model,
+            persist_directory=self.persist_directory
         )
 
     def add_embeddings(
         self,
         chunks: List[Dict[str, Any]]
     ) -> bool:
-        """
-        Add embeddings to the vector store.
-        
-        Args:
-            chunks: List of chunks with their embeddings
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
         try:
-            # Prepare data for ChromaDB
-            ids = [str(chunk["chunk_id"]) for chunk in chunks]
-            embeddings = [chunk["embedding"] for chunk in chunks]
             documents = [chunk["content"] for chunk in chunks]
             metadatas = [chunk["metadata"] for chunk in chunks]
-            
-            # Add to collection
-            self.collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                documents=documents,
-                metadatas=metadatas
-            )
-            
+            ids = [str(chunk["chunk_id"]) for chunk in chunks]
+            self.chroma.add_texts(documents, metadatas=metadatas, ids=ids)
+            self.chroma.persist()
             return True
-            
         except Exception as e:
             logger.error(f"Error adding embeddings to vector store: {str(e)}")
             return False
 
     def search(
         self,
-        query_embedding: List[float],
+        query: str,
         n_results: int = 5
     ) -> List[Dict[str, Any]]:
-        """
-        Search for similar log entries using an embedding.
-        
-        Args:
-            query_embedding: Query embedding vector
-            n_results: Number of results to return
-            
-        Returns:
-            List of similar log entries
-        """
         try:
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=n_results
-            )
-            
-            # Format results
+            results = self.chroma.similarity_search_with_score(query, k=n_results)
             formatted_results = []
-            for i in range(len(results["ids"][0])):
+            for doc, score in results:
                 formatted_results.append({
-                    "id": results["ids"][0][i],
-                    "content": results["documents"][0][i],
-                    "metadata": results["metadatas"][0][i],
-                    "distance": results["distances"][0][i]
+                    "content": doc.page_content,
+                    "metadata": doc.metadata,
+                    "distance": score
                 })
-            
             return formatted_results
-            
         except Exception as e:
             logger.error(f"Error searching vector store: {str(e)}")
             return []
 
-    def delete_collection(self) -> bool:
-        """
-        Delete the current collection.
-        
-        Returns:
-            bool: True if successful, False otherwise
-        """
+    def get_collection_stats(self) -> Dict[str, Any]:
         try:
-            self.client.delete_collection(self.collection_name)
+            return {"collection_name": self.collection_name, "persist_directory": self.persist_directory}
+        except Exception as e:
+            logger.error(f"Error getting collection stats: {str(e)}")
+            return {}
+
+    def delete_collection(self) -> bool:
+        try:
+            self.chroma.delete_collection()
             return True
         except Exception as e:
             logger.error(f"Error deleting collection: {str(e)}")
-            return False
-
-    def get_collection_stats(self) -> Dict[str, Any]:
-        """
-        Get statistics about the current collection.
-        
-        Returns:
-            Dictionary containing collection statistics
-        """
-        try:
-            count = self.collection.count()
-            return {
-                "collection_name": self.collection_name,
-                "total_documents": count,
-                "persist_directory": self.persist_directory
-            }
-        except Exception as e:
-            logger.error(f"Error getting collection stats: {str(e)}")
-            return {} 
+            return False 

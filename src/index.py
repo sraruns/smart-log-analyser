@@ -12,7 +12,6 @@ def main():
 
     # Generate response
     response = generator.generate(context)
-
     print(response)
 
 if __name__ == "__main__":
