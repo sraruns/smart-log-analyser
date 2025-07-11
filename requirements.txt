@@ -1,27 +1,7 @@
-# Core Dependencies
-langchain>=0.1.0
-langchain-openai>=0.0.2
-chromadb>=0.4.22
-python-dotenv>=1.0.0
-tiktoken>=0.5.2
-google-generativeai>=0.3.2
-
-# Data Processing
-pandas>=2.1.0
-numpy>=1.24.0
-
-# Web Framework
-Flask>=2.0.1
-
-# ML/AI
-transformers>=4.36.0
-torch>=2.1.0
-
-# Logging and Monitoring
-loguru>=0.7.2
-
-# Development Tools
-pytest>=7.4.0
-black>=23.7.0
-isort>=5.12.0
-flake8>=6.1.0
+langchain
+google-generativeai
+langchain-google-genai
+chromadb
+python-dotenv
+loguru
+yaml
