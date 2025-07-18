@@ -1,0 +1,26 @@
+[project]
+name = "smart-log-analyser"
+version = "0.1.0"
+description = "A smart log analysis tool using LLMs, embeddings, and vector search."
+authors = [
+    {name = "Name"},
+    {name = "AK"}
+]
+readme = "README.md"
+requires-python = "==3.10.18"
+dependencies = [
+    "langchain",
+    "google-generativeai",
+    "langchain-google-genai",
+    "chromadb",
+    "python-dotenv",
+    "loguru",
+    "PyYAML"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.poetry]
+packages = [{ include = "smart_log_analyser" }] 
