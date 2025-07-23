@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import yaml
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from loguru import logger
@@ -13,12 +13,10 @@ class LogEmbedder:
             config = yaml.safe_load(f)
         embedding_cfg = config['embedding']
         llm_cfg = config['llm']
-        self.model_name = embedding_cfg.get('model_name', 'models/embedding-001')
+        self.model_name = embedding_cfg['model_name']  # Required, no default
         self.batch_size = embedding_cfg.get('batch_size', 100)
-        self.api_key = llm_cfg.get('api_key')
         self.embeddings = GoogleGenerativeAIEmbeddings(
             model=self.model_name,
-            google_api_key=self.api_key
         )
 
     def generate_embeddings(

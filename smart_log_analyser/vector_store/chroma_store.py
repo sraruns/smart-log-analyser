@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 import yaml
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from loguru import logger
 
@@ -18,8 +18,7 @@ class ChromaStore:
         self.collection_name = vs_cfg.get('collection_name', 'log_embeddings')
         self.persist_directory = vs_cfg.get('persist_directory', './data/vector_store')
         self.embedding_model = GoogleGenerativeAIEmbeddings(
-            model=emb_cfg.get('model_name', 'models/embedding-001'),
-            google_api_key=llm_cfg.get('api_key')
+            model=emb_cfg.get('model_name', 'models/embedding-001')
         )
         self.chroma = Chroma(
             collection_name=self.collection_name,

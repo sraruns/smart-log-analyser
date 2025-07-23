@@ -1,4 +1,4 @@
-from src.main import SmartLogAnalyzer
+from smart_log_analyser.main import SmartLogAnalyzer
 
 def main():
     analyzer = SmartLogAnalyzer()
