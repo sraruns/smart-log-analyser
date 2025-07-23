@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import yaml
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
@@ -13,21 +13,23 @@ class LLMAnalyzer:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         llm_cfg = config['llm']
-        self.model_name = llm_cfg.get('model_name', 'gemini-pro')
+        self.model_name = llm_cfg['model_name']  #Required
         self.temperature = llm_cfg.get('temperature', 0.1)
         self.max_output_tokens = llm_cfg.get('max_output_tokens', 2048)
         self.top_p = llm_cfg.get('top_p', 0.8)
         self.top_k = llm_cfg.get('top_k', 40)
-        self.api_key = llm_cfg.get('api_key')
-        self.safety_settings = llm_cfg.get('safety_settings', [])
+        
+        # Convert safety settings list to dictionary format if needed
+        self.safety_settings = self._process_safety_settings(
+            llm_cfg.get('safety_settings', [])
+        )
+        
         self.llm = ChatGoogleGenerativeAI(
             model=self.model_name,
-            google_api_key=self.api_key,
             temperature=self.temperature,
             max_output_tokens=self.max_output_tokens,
             top_p=self.top_p,
-            top_k=self.top_k,
-            safety_settings=self.safety_settings
+            top_k=self.top_k
         )
         self.prompts = {
             "log_analysis": PromptTemplate(
@@ -43,6 +45,27 @@ class LLMAnalyzer:
                 template="""You are an expert in root cause analysis. Given the following log entries:\n1. Identify the root cause of any issues\n2. Explain the sequence of events\n3. Suggest preventive measures\n4. Provide actionable recommendations\n\nLog entries:\n{logs}\n\nProvide your analysis in a structured format."""
             )
         }
+
+    def _process_safety_settings(self, safety_settings: list) -> dict:
+        """Convert safety settings from list format to dictionary format.
+        
+        Args:
+            safety_settings: List of safety setting dictionaries
+            
+        Returns:
+            Dictionary of safety settings in the format expected by ChatGoogleGenerativeAI
+        """
+        if not safety_settings or not isinstance(safety_settings, list):
+            # Default safety settings if none provided
+            return {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE"
+            }
+            
+        # Convert list of {category: ..., threshold: ...} to {category: threshold}
+        return {item['category']: item['threshold'] for item in safety_settings}
 
     def analyze_logs(
         self,

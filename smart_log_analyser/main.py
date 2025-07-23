@@ -4,12 +4,12 @@ from typing import List, Dict, Any
 from dotenv import load_dotenv
 from loguru import logger
 
-from .data import LogParser
-from .embedding import LogChunker, LogEmbedder
-from .vector_store import ChromaStore
-from .analysis import LLMAnalyzer
-from .generator import Generator
-
+from smart_log_analyser.data import LogParser
+from smart_log_analyser.embedding.chunker import LogChunker
+from smart_log_analyser.embedding.embedder import LogEmbedder
+from smart_log_analyser.vector_store.chroma_store import ChromaStore
+from smart_log_analyser.analysis.llm_analyzer import LLMAnalyzer
+from smart_log_analyser.generator import Generator
 class SmartLogAnalyzer:
     def __init__(self, config_path: str = "config/config.yaml"):
         load_dotenv()

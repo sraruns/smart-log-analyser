@@ -8,13 +8,11 @@ class Generator:
             config = yaml.safe_load(f)
         llm_cfg = config['llm']
         self.llm = ChatGoogleGenerativeAI(
-            model=llm_cfg.get('model_name', 'gemini-pro'),
-            google_api_key=llm_cfg.get('api_key'),
+            model=llm_cfg['model_name'],  # Required, no default
             temperature=llm_cfg.get('temperature', 0.1),
             max_output_tokens=llm_cfg.get('max_output_tokens', 2048),
             top_p=llm_cfg.get('top_p', 0.8),
-            top_k=llm_cfg.get('top_k', 40),
-            safety_settings=llm_cfg.get('safety_settings', [])
+            top_k=llm_cfg.get('top_k', 40)
         )
         self.prompt = PromptTemplate(
             input_variables=["context"],

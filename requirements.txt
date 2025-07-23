@@ -4,4 +4,5 @@ langchain-google-genai
 chromadb
 python-dotenv
 loguru
-yaml
+pyYAML  
+langchain-community
