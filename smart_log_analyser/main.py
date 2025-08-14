@@ -1,138 +1,285 @@
+#!/usr/bin/env python3
+"""
+Enhanced Smart Log Analyzer with RAG Chain Implementation.
+
+This demo showcases:
+- Log processing with embedding generation
+- RAG-enhanced LLM analysis using LangChain
+- Improved error detection and classification
+- Context-aware analysis using historical patterns
+"""
+
+import sys
 import os
-import yaml
 from typing import List, Dict, Any
-from dotenv import load_dotenv
 from loguru import logger
+from dotenv import load_dotenv
 
-from smart_log_analyser.data import LogParser
-from smart_log_analyser.embedding.chunker import LogChunker
-from smart_log_analyser.embedding.embedder import LogEmbedder
-from smart_log_analyser.vector_store.chroma_store import ChromaStore
-from smart_log_analyser.analysis.llm_analyzer import LLMAnalyzer
-from smart_log_analyser.generator import Generator
-class SmartLogAnalyzer:
-    def __init__(self, config_path: str = "config/config.yaml"):
-        load_dotenv()
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        self.parser = LogParser(
-            timestamp_format=self.config['log_processing']['timestamp_format']
-        )
-        self.chunker = LogChunker(
-            chunk_size=self.config['chunking']['chunk_size'],
-            chunk_overlap=self.config['chunking']['chunk_overlap'],
-            separator=self.config['chunking']['separator']
-        )
-        self.embedder = LogEmbedder(config_path=config_path)
-        self.vector_store = ChromaStore(config_path=config_path)
-        self.llm_analyzer = LLMAnalyzer(config_path=config_path)
-        self.generator = Generator(config_path=config_path)
+# Load environment variables from .env file
+load_dotenv()
 
-    def process_logs(
-        self,
-        log_lines: List[str],
-        format_type: str = "text",
-        analyze: bool = True
-    ) -> Dict[str, Any]:
+# Add the project root to Python path
+sys.path.insert(0, os.path.abspath('.'))
+
+from smart_log_analyser.core.smart_log_analyzer import SmartLogAnalyzer
+from smart_log_analyser.analysis.rag_chain import LogAnalysisRAGChain
+
+
+def demonstrate_rag_enhanced_analysis():
+    """Demonstrate the RAG-enhanced Smart Log Analyzer."""
+    try:
+        logger.info("=== RAG-Enhanced Smart Log Analyzer Demo ===")
+        
+        # Initialize analyzer
+        analyzer = SmartLogAnalyzer("config/config.yaml")
+        
+        # Sample log data with various issues (structured format)
+        sample_logs_dict = [
+            {
+                "timestamp": "2024-01-15 10:30:15",
+                "level": "INFO",
+                "message": "Application started successfully"
+            },
+            {
+                "timestamp": "2024-01-15 10:30:16",
+                "level": "INFO",
+                "message": "Database connection established"
+            },
+            {
+                "timestamp": "2024-01-15 10:31:22",
+                "level": "WARNING",
+                "message": "High memory usage detected: 85% of 8GB used"
+            },
+            {
+                "timestamp": "2024-01-15 10:32:45",
+                "level": "ERROR",
+                "message": "Failed to process payment request: Invalid card number"
+            },
+            {
+                "timestamp": "2024-01-15 10:33:12",
+                "level": "INFO",
+                "message": "User login successful for user@example.com"
+            },
+            {
+                "timestamp": "2024-01-15 10:34:28",
+                "level": "WARNING",
+                "message": "Disk space low: 95% full on /var/log partition"
+            },
+            {
+                "timestamp": "2024-01-15 10:35:44",
+                "level": "ERROR",
+                "message": "Service unavailable: Downstream service timeout"
+            },
+            {
+                "timestamp": "2024-01-15 10:36:15",
+                "level": "INFO",
+                "message": "Cache cleared successfully"
+            },
+            {
+                "timestamp": "2024-01-15 10:37:22",
+                "level": "CRITICAL",
+                "message": "Database connection lost - attempting reconnection"
+            },
+            {
+                "timestamp": "2024-01-15 10:38:01",
+                "level": "INFO",
+                "message": "User logout successful for user@example.com"
+            }
+        ]
+        
+        # Convert to string format for processing
+        sample_logs = []
+        for log_dict in sample_logs_dict:
+            log_string = f"{log_dict['timestamp']} {log_dict['level']}: {log_dict['message']}"
+            sample_logs.append(log_string)
+        
+        logger.info(f"📝 Processing {len(sample_logs)} sample log entries...")
+        
+        # First, process logs to populate the vector store
+        result = analyzer.process_logs(sample_logs, analyze=False)
+        
+        if result["status"] == "success":
+            logger.info(f"✅ Processed {result['processed_logs']} logs into {result['chunks_created']} chunks")
+            logger.info(f"📊 Added {result['embeddings_added']} embeddings to vector store")
+            logger.info(f"🤖 Using embedding model: {result['embedding_model']['model_name']}")
+        else:
+            logger.error(f"❌ Processing failed: {result.get('message', 'Unknown error')}")
+            return False
+        
+        # Initialize RAG Chain with the vector store
+        logger.info("🔗 Initializing RAG Chain...")
+        
+        # Get LLM config from analyzer
+        with open("config/config.yaml", 'r') as f:
+            import yaml
+            config = yaml.safe_load(f)
+        
+        llm_config = config.get('llm', {})
+        
+        # Check for Google API key
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key or api_key == "your_api_key_here":
+            logger.warning("⚠️  GOOGLE_API_KEY not found or not set!")
+            logger.info("📝 To enable LLM analysis:")
+            logger.info("   1. Get your API key from: https://makersuite.google.com/app/apikey")
+            logger.info("   2. Set it in .env file: GOOGLE_API_KEY=your_actual_key")
+            logger.info("   3. Or export it: export GOOGLE_API_KEY=your_actual_key")
+            logger.info("🚀 Continuing with basic analysis (without RAG)...")
+            return True
+        
+        # Create RAG chain
+        rag_chain = LogAnalysisRAGChain(analyzer.vector_store, llm_config)
+        
+        logger.info("✅ RAG Chain initialized successfully")
+        
+        # Demonstrate RAG-Enhanced Analysis
+        logger.info("\n🧠 Running RAG-Enhanced Analysis:")
+        
+        # Test 1: Anomaly Detection with RAG
+        logger.info("\n  1. 🔍 Anomaly Detection Analysis:")
         try:
-            parsed_logs = self.parser.parse_batch(log_lines, format_type)
-            logger.info(f"Parsed {len(parsed_logs)} log entries")
-            chunks = self.chunker.chunk_logs(parsed_logs)
-            logger.info(f"Created {len(chunks)} chunks")
-            chunks_with_embeddings = self.embedder.generate_embeddings(chunks)
-            logger.info(f"Generated embeddings for {len(chunks_with_embeddings)} chunks")
-            success = self.vector_store.add_embeddings(chunks_with_embeddings)
-            if success:
-                logger.info("Successfully stored embeddings in vector database")
+            anomaly_result = rag_chain.analyze_anomalies(sample_logs_dict)
+            if anomaly_result["status"] == "success":
+                logger.info("     ✅ Anomaly detection completed")
+                logger.info(f"     📋 Analysis type: {anomaly_result['analysis_type']}")
+                logger.info(f"     📊 Analyzed {anomaly_result['log_count']} log entries")
+                logger.info(f"     🤖 Model used: {anomaly_result['model_used']}")
+                logger.info(f"     📚 Retrieved {len(anomaly_result.get('source_documents', []))} context documents")
+                
+                # Display the analysis result
+                print("\n" + "="*80)
+                print("ANOMALY DETECTION RESULTS:")
+                print("="*80)
+                print(anomaly_result["analysis"])
+                print("="*80 + "\n")
+                
             else:
-                logger.error("Failed to store embeddings in vector database")
-            analysis_results = {}
-            if analyze and success:
-                analysis_results["general"] = self.llm_analyzer.analyze_logs(parsed_logs)
-                analysis_results["anomalies"] = self.llm_analyzer.detect_anomalies(parsed_logs)
-                if analysis_results["anomalies"]["status"] == "success":
-                    analysis_results["root_cause"] = self.llm_analyzer.analyze_root_cause(parsed_logs)
-            return {
-                "status": "success" if success else "error",
-                "parsed_logs": len(parsed_logs),
-                "chunks": len(chunks),
-                "analysis": analysis_results if analyze else None
-            }
+                logger.warning(f"     ⚠️ Anomaly detection failed: {anomaly_result.get('message', 'Unknown error')}")
         except Exception as e:
-            logger.error(f"Error processing logs: {str(e)}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-
-    def search_logs(
-        self,
-        query: str,
-        n_results: int = 5,
-        analyze: bool = True
-    ) -> Dict[str, Any]:
+            logger.error(f"     ❌ Anomaly detection error: {str(e)}")
+        
+        # Test 2: Root Cause Analysis with RAG
+        logger.info("  2. 🔍 Root Cause Analysis:")
         try:
-            # Use the query string directly for search
-            results = self.vector_store.search(query=query, n_results=n_results)
-            analysis_results = {}
-            if analyze and results:
-                log_entries = [
-                    {
-                        "content": result["content"],
-                        "metadata": result["metadata"]
-                    }
-                    for result in results
-                ]
-                analysis_results = self.llm_analyzer.analyze_logs(log_entries)
-            return {
-                "status": "success",
-                "results": results,
-                "analysis": analysis_results if analyze else None
-            }
+            root_cause_result = rag_chain.analyze_root_cause(sample_logs_dict)
+            if root_cause_result["status"] == "success":
+                logger.info("     ✅ Root cause analysis completed")
+                logger.info(f"     📋 Analysis type: {root_cause_result['analysis_type']}")
+                logger.info(f"     📊 Analyzed {root_cause_result['log_count']} log entries")
+                logger.info(f"     📚 Retrieved {len(root_cause_result.get('source_documents', []))} context documents")
+                
+                # Display the analysis result
+                print("\n" + "="*80)
+                print("ROOT CAUSE ANALYSIS RESULTS:")
+                print("="*80)
+                print(root_cause_result["analysis"])
+                print("="*80 + "\n")
+                
+            else:
+                logger.warning(f"     ⚠️ Root cause analysis failed: {root_cause_result.get('message', 'Unknown error')}")
         except Exception as e:
-            logger.error(f"Error searching logs: {str(e)}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            logger.error(f"     ❌ Root cause analysis error: {str(e)}")
+        
+        # Test 3: Log Summary with RAG
+        logger.info("  3. 📋 Log Summary Analysis:")
+        try:
+            summary_result = rag_chain.summarize_logs(sample_logs_dict)
+            if summary_result["status"] == "success":
+                logger.info("     ✅ Log summary completed")
+                logger.info(f"     📋 Analysis type: {summary_result['analysis_type']}")
+                logger.info(f"     📊 Analyzed {summary_result['log_count']} log entries")
+                logger.info(f"     📚 Retrieved {len(summary_result.get('source_documents', []))} context documents")
+                
+                # Display the analysis result
+                print("\n" + "="*80)
+                print("LOG SUMMARY RESULTS:")
+                print("="*80)
+                print(summary_result["analysis"])
+                print("="*80 + "\n")
+                
+            else:
+                logger.warning(f"     ⚠️ Log summary failed: {summary_result.get('message', 'Unknown error')}")
+        except Exception as e:
+            logger.error(f"     ❌ Log summary error: {str(e)}")
+        
+        # Display final statistics
+        logger.info("📈 Final Statistics:")
+        stats = analyzer.get_stats()
+        vector_stats = stats.get("vector_store", {})
+        embedding_stats = stats.get("embedding_model", {})
+        
+        logger.info(f"   Total embeddings: {vector_stats.get('total_embeddings', 'Unknown')}")
+        logger.info(f"   Vector store version: {vector_stats.get('version', 'Unknown')}")
+        logger.info(f"   Last updated: {vector_stats.get('last_updated', 'Unknown')}")
+        
+        logger.info("🤖 Embedding Model Information:")
+        logger.info(f"   Current model: {embedding_stats.get('model_name', 'Unknown')}")
+        logger.info(f"   Model type: {embedding_stats.get('type', 'Unknown')}")
+        logger.info(f"   Dimension: {embedding_stats.get('dimension', 'Unknown')}")
+        
+        logger.info("✅ RAG-enhanced demo completed successfully!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Demo failed with error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-    def get_stats(self) -> Dict[str, Any]:
-        return {
-            "vector_store": self.vector_store.get_collection_stats(),
-            "config": {
-                "chunking": self.config['chunking'],
-                "embedding": self.config['embedding'],
-                "vector_store": self.config['vector_store'],
-                "llm": self.config.get('llm', {})
-            }
-        }
+
+def demonstrate_embedding_comparison():
+    """Demonstrate embedding model comparison capabilities."""
+    try:
+        logger.info("=== Embedding Model Comparison ===")
+        
+        analyzer = SmartLogAnalyzer("config/config.yaml")
+        comparison = analyzer.get_embedding_comparison()
+        
+        logger.info("📊 Embedding Model Comparison Results:")
+        logger.info(f"   Current model: {comparison.get('current_model', {})}")
+        logger.info(f"   Available models: {comparison.get('available_models', [])}")
+        logger.info(f"   Recommendation: {comparison.get('recommendation', 'N/A')}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Embedding comparison failed: {str(e)}")
+        return False
+
 
 def main():
-    analyzer = SmartLogAnalyzer()
-    log_lines = [
-        "2024-03-20 10:15:30 [INFO] User login successful",
-        "2024-03-20 10:15:35 [ERROR] Database connection failed",
-        "2024-03-20 10:15:40 [WARNING] High memory usage detected",
-        "2024-03-20 10:15:45 [ERROR] Failed to process request",
-        "2024-03-20 10:15:50 [INFO] System backup completed"
-    ]
-    result = analyzer.process_logs(log_lines, analyze=True)
-    print("\nProcessing Results:")
-    print(f"Status: {result['status']}")
-    print(f"Parsed Logs: {result['parsed_logs']}")
-    print(f"Chunks: {result['chunks']}")
-    if result.get('analysis'):
-        print("\nAnalysis Results:")
-        for analysis_type, analysis_result in result['analysis'].items():
-            print(f"\n{analysis_type.upper()} Analysis:")
-            print(analysis_result['result'])
-    search_result = analyzer.search_logs("database error", analyze=True)
-    print("\nSearch Results:")
-    for result in search_result['results']:
-        print(f"Found: {result['content']} (Distance: {result['distance']})")
-    if search_result.get('analysis'):
-        print("\nSearch Analysis:")
-        print(search_result['analysis']['result'])
+    """Main function to run the enhanced demo."""
+    try:
+        logger.info("🚀 Starting RAG-Enhanced Smart Log Analyzer Demo...")
+        
+        # Run main demonstration
+        demo_success = demonstrate_rag_enhanced_analysis()
+        
+        # Run embedding comparison
+        comparison_success = demonstrate_embedding_comparison()
+        
+        if demo_success and comparison_success:
+            logger.info("🎉 All demos completed successfully!")
+            logger.info("💡 The Smart Log Analyzer with RAG is ready for production use!")
+            logger.info("📚 Features demonstrated:")
+            logger.info("   - Log processing and chunking")
+            logger.info("   - Embedding generation (auto-selected model)")
+            logger.info("   - Vector storage (Qdrant/Chroma)")
+            logger.info("   - RAG-enhanced LLM analysis with historical context")
+            logger.info("   - Improved error detection and classification")
+            logger.info("   - Context-aware anomaly detection")
+            logger.info("   - Comprehensive error handling and logging")
+            return 0
+        else:
+            logger.error("💥 Some demos failed. Check the logs above for details.")
+            return 1
+            
+    except Exception as e:
+        logger.error(f"💥 Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main())
