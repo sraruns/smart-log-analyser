@@ -96,4 +96,36 @@ class LogParser:
         Returns:
             List of parsed log entries
         """
-        return [self.parse(line, format_type) for line in log_lines] 
+        return [self.parse(line, format_type) for line in log_lines]
+    
+    def extract_semantic_content(self, parsed_log: Dict) -> str:
+        """
+        Extract semantic content from parsed log for better embeddings.
+        Removes timestamps and focuses on level + message content.
+        
+        Args:
+            parsed_log: Parsed log dictionary
+            
+        Returns:
+            Semantic content string optimized for embeddings
+        """
+        if "error" in parsed_log:
+            return parsed_log.get("raw", "")
+        
+        level = parsed_log.get("level", "").upper()
+        message = parsed_log.get("message", "").strip()
+        
+        # Create semantic content focusing on log level and message
+        semantic_content = f"{level}: {message}"
+        
+        # Add relevant metadata if availablepythin
+        metadata = parsed_log.get("metadata", {})
+        if metadata:
+            # Filter out noise metadata like hostnames, pids
+            relevant_metadata = {k: v for k, v in metadata.items() 
+                               if k not in ["hostname", "pid", "program"] and v}
+            if relevant_metadata:
+                metadata_str = " ".join([f"{k}={v}" for k, v in relevant_metadata.items()])
+                semantic_content += f" [{metadata_str}]"
+        
+        return semantic_content

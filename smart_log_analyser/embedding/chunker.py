@@ -1,9 +1,11 @@
 from typing import List, Dict, Any
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from loguru import logger
-
+from smart_log_analyser.data.log_parser import LogParser
+import yaml
 class LogChunker:
     def __init__(
+        
         self,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
@@ -17,6 +19,14 @@ class LogChunker:
             chunk_overlap: Number of characters to overlap between chunks
             separator: Character(s) to use for splitting text
         """
+        with open("config/config.yaml", 'r') as f:
+            config = yaml.safe_load(f)
+            chunk_size = config['chunking']['chunk_size']
+            chunk_overlap = config['chunking']['chunk_overlap']
+            separator = config['chunking']['separator']
+ 
+        logger.info(f"Chunk size: {chunk_size} Chunk overlap: {chunk_overlap} Separator: {separator}")
+        
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -24,68 +34,107 @@ class LogChunker:
             length_function=len,
         )
 
-    def chunk_logs(self, logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def chunk_logs(self, parsed_logs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Chunk a list of parsed logs into smaller segments.
+        Chunk parsed logs into manageable segments for embedding.
         
         Args:
-            logs: List of parsed log entries
+            parsed_logs: List of parsed log entries
             
         Returns:
-            List of chunked log entries with metadata
+            List of chunked log segments with metadata
         """
+        if not parsed_logs:
+            return []
+        
+        
+
         try:
-            # Combine logs into a single text
-            combined_text = self._combine_logs(logs)
+            with open("config/config.yaml", 'r') as f:
+                config = yaml.safe_load(f)
+            search_cfg = config.get('search', {})
+            include_combined = search_cfg.get('include_combined_chunks', False)
+        except:
+            include_combined = False
+        
+        # For log analysis, we'll use individual log entries as chunks
+        # This provides better precision for similarity search
+        chunks = []
+        
+        for i, log in enumerate(parsed_logs):
+            # Extract semantic content for better embeddings
+            parser = LogParser()
+            semantic_content = parser.extract_semantic_content(log)
             
-            # Split into chunks
-            chunks = self.text_splitter.split_text(combined_text)
-            
-            # Convert chunks back to structured format
-            chunked_logs = []
-            for i, chunk in enumerate(chunks):
-                chunked_logs.append({
-                    "chunk_id": i,
-                    "content": chunk,
+            chunk = {
+                "chunk_id": f"log_{i}",
+                "content": semantic_content,  # Use semantic content instead of raw log
+                "metadata": {
+                    "original_content": self._format_log_entry(log),
+                    "log_level": log.get("level", "INFO"),
+                    "timestamp": log.get("timestamp", ""),
+                    "chunk_index": i,
+                    "chunk_type": "individual_log"
+                }
+            }
+            chunks.append(chunk)
+        
+        # Only create combined chunks if explicitly enabled in config
+        if include_combined and len(chunks) > 3:  # Create combined chunks for better context
+            combined_content = self._combine_logs_for_context(parsed_logs[:10])  # Limit to prevent huge chunks
+            if combined_content:
+                chunks.append({
+                    "chunk_id": f"combined_context_{len(chunks)}",
+                    "content": combined_content,
                     "metadata": {
-                        "chunk_size": len(chunk),
-                        "total_chunks": len(chunks),
-                        "chunk_index": i
+                        "chunk_type": "combined_context",
+                        "log_count": min(len(parsed_logs), 10),
+                        "chunk_index": len(chunks)
                     }
                 })
-            
-            return chunked_logs
-            
-        except Exception as e:
-            logger.error(f"Error chunking logs: {str(e)}")
-            return []
-
-    def _combine_logs(self, logs: List[Dict[str, Any]]) -> str:
+        
+        logger.info(f"Created {len(chunks)} chunks from {len(parsed_logs)} logs")
+        return chunks
+    
+    def _combine_logs_for_context(self, parsed_logs: List[Dict[str, Any]]) -> str:
         """
-        Combine multiple log entries into a single text string.
+        Combine multiple logs into a single chunk for broader context.
         
         Args:
-            logs: List of parsed log entries
+            parsed_logs: List of parsed log entries
             
         Returns:
-            Combined text string
+            Combined semantic content
         """
-        combined = []
-        for log in logs:
-            # Format each log entry
-            timestamp = log.get("timestamp", "")
-            level = log.get("level", "INFO")
-            message = log.get("message", "")
-            metadata = log.get("metadata", {})
-            
-            # Create formatted log entry
-            log_entry = f"[{timestamp}] [{level}] {message}"
-            if metadata:
-                log_entry += f" {metadata}"
-            
-            combined.append(log_entry)
+        parser = LogParser()
         
-        return "\n".join(combined)
+        semantic_contents = []
+        for log in parsed_logs:
+            semantic_content = parser.extract_semantic_content(log)
+            semantic_contents.append(semantic_content)
+        
+        return "\n".join(semantic_contents)
+
+    def _format_log_entry(self, log: Dict[str, Any]) -> str:
+        """
+        Format a single log entry into a string.
+        
+        Args:
+            log: Parsed log entry
+            
+        Returns:
+            Formatted log entry string
+        """
+        timestamp = log.get("timestamp", "")
+        level = log.get("level", "INFO")
+        message = log.get("message", "")
+        metadata = log.get("metadata", {})
+        
+        log_entry = f"[{timestamp}] [{level}] {message}"
+        if metadata:
+            log_entry += f" {metadata}"
+        
+        return log_entry
 
     def chunk_single_log(self, log: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -97,4 +146,4 @@ class LogChunker:
         Returns:
             List of chunked log segments
         """
-        return self.chunk_logs([log]) 
+        return self.chunk_logs([log])
