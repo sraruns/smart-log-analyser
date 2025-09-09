@@ -76,8 +76,8 @@ class SmartLogAnalyzer:
         if store_type == 'qdrant':
             try:
                 return QdrantStore(self.config_manager.config_path)
-            except ImportError:
-                logger.warning("Qdrant not available, falling back to Chroma")
+            except (ImportError, ConnectionError, OSError, Exception) as e:
+                logger.warning(f"Qdrant not available ({str(e)}), falling back to Chroma")
                 return ChromaStore(self.config_manager.config_path)
         
         elif store_type == 'chroma':
@@ -88,8 +88,8 @@ class SmartLogAnalyzer:
             try:
                 logger.info("Auto-selecting vector store: trying Qdrant first")
                 return QdrantStore(self.config_manager.config_path)
-            except ImportError:
-                logger.info("Qdrant not available, using Chroma")
+            except (ImportError, ConnectionError, OSError, Exception) as e:
+                logger.info(f"Qdrant not available ({str(e)}), using Chroma")
                 return ChromaStore(self.config_manager.config_path)
     
     def _setup_vector_store(self):
@@ -108,22 +108,26 @@ class SmartLogAnalyzer:
             logger.error(f"Error setting up vector store: {str(e)}")
             # Continue without failing - vector store might still work
     
-    def process_logs(
+    def process_logs_for_vector_storage(
         self, 
         log_input: Union[str, List[str]],
-        format_type: str = "text",
-        analyze: bool = False
+        format_type: str = "text"
     ) -> Dict[str, Any]:
         """
-        Process logs with enhanced pipeline.
+        Process logs for vector storage (chunking + embedding for RAG).
+        
+        This method is specifically for preparing logs for RAG analysis by:
+        1. Parsing logs
+        2. Chunking them appropriately 
+        3. Generating embeddings
+        4. Storing in vector database
         
         Args:
             log_input: Either a file path (str) or a list of log lines
             format_type: The format of the logs (default: "text")
-            analyze: Whether to perform LLM analysis (default: False)
             
         Returns:
-            Dict containing processing results and analysis if requested
+            Dict containing vector storage results
         """
         try:
             # Handle both file path and list of log lines
@@ -150,24 +154,116 @@ class SmartLogAnalyzer:
             if not success:
                 logger.warning("Failed to add some embeddings to vector store")
             
-            # Optional: Analyze logs for anomalies
-            analysis = {}
-            if analyze:
-                analysis = self._perform_llm_analysis(parsed_logs)
-            
             return {
                 "status": "success",
                 "processed_logs": len(processed_logs),
                 "chunks_created": len(chunks),
                 "embeddings_added": len(embedded_chunks),
-                "analysis": analysis,
                 "vector_store_stats": self.vector_store.get_collection_stats(),
                 "embedding_model": self.log_embedder.get_model_info()
             }
             
         except Exception as e:
-            logger.error(f"Error processing logs: {str(e)}")
+            logger.error(f"Error processing logs for vector storage: {str(e)}")
             return {"status": "error", "message": str(e)}
+    
+    def analyze_logs_with_llm(
+        self,
+        log_input: Union[str, List[str]],
+        format_type: str = "text",
+        analysis_types: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Perform basic LLM analysis on logs (no chunking/embedding needed).
+        
+        This method is for direct LLM analysis without RAG:
+        1. Parsing logs
+        2. Direct LLM analysis on parsed logs
+        3. Returns analysis results
+        
+        Args:
+            log_input: Either a file path (str) or a list of log lines
+            format_type: The format of the logs (default: "text")
+            analysis_types: List of analysis types to perform (default: ["anomaly_detection"])
+            
+        Returns:
+            Dict containing LLM analysis results
+        """
+        try:
+            if analysis_types is None:
+                analysis_types = ["anomaly_detection"]
+            
+            # Handle both file path and list of log lines
+            log_lines = self._prepare_log_lines(log_input)
+            
+            if not log_lines:
+                return {"status": "error", "message": "No log lines to process"}
+            
+            # Parse logs (no chunking/embedding needed for basic LLM analysis)
+            parsed_logs = self.log_parser.parse_batch(log_lines, format_type)
+            
+            # Perform LLM analysis directly on parsed logs
+            analysis_results = {}
+            for analysis_type in analysis_types:
+                if analysis_type == "anomaly_detection":
+                    analysis_results["anomalies"] = self.llm_analyzer.detect_anomalies(parsed_logs)
+                elif analysis_type == "root_cause":
+                    analysis_results["root_cause"] = self.llm_analyzer.analyze_root_cause(parsed_logs)
+                elif analysis_type == "log_summary":
+                    analysis_results["summary"] = self.llm_analyzer.summarize_logs(parsed_logs)
+                else:
+                    # Custom analysis type
+                    analysis_results[analysis_type] = self.llm_analyzer.analyze_logs(parsed_logs, analysis_type)
+            
+            return {
+                "status": "success",
+                "processed_logs": len(parsed_logs),
+                "analysis_types": analysis_types,
+                "analysis": analysis_results,
+                "model_info": self.llm_analyzer.get_model_info()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in LLM analysis: {str(e)}")
+            return {"status": "error", "message": str(e)}
+    
+    def process_logs(
+        self, 
+        log_input: Union[str, List[str]],
+        format_type: str = "text",
+        analyze: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Legacy method - processes logs for vector storage (maintains backward compatibility).
+        
+        Note: This method is kept for backward compatibility but it's recommended to use:
+        - process_logs_for_vector_storage() for RAG preparation
+        - analyze_logs_with_llm() for basic LLM analysis
+        
+        Args:
+            log_input: Either a file path (str) or a list of log lines
+            format_type: The format of the logs (default: "text")
+            analyze: Whether to perform LLM analysis (default: False)
+            
+        Returns:
+            Dict containing processing results and analysis if requested
+        """
+        logger.info("Using legacy process_logs method. Consider using process_logs_for_vector_storage() or analyze_logs_with_llm()")
+        
+        # Process for vector storage
+        vector_result = self.process_logs_for_vector_storage(log_input, format_type)
+        
+        if vector_result["status"] != "success":
+            return vector_result
+        
+        # Optional: Analyze logs
+        if analyze:
+            analysis_result = self.analyze_logs_with_llm(log_input, format_type, ["anomaly_detection"])
+            if analysis_result["status"] == "success":
+                vector_result["analysis"] = analysis_result["analysis"]
+                vector_result["model_info"] = analysis_result["model_info"]
+        
+        return vector_result
     
     def _prepare_log_lines(self, log_input: Union[str, List[str]]) -> List[str]:
         """Prepare log lines from input (file or list)."""
@@ -190,18 +286,7 @@ class SmartLogAnalyzer:
             processed_logs.append(log)
         return processed_logs
     
-    def _perform_llm_analysis(self, parsed_logs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Perform LLM analysis on logs."""
-        analysis = {}
-        try:
-            analysis["anomalies"] = self.llm_analyzer.detect_anomalies(parsed_logs)
-            if analysis["anomalies"].get("status") == "success":
-                analysis["root_cause"] = self.llm_analyzer.analyze_root_cause(parsed_logs)
-        except Exception as e:
-            logger.error(f"Error in LLM analysis: {str(e)}")
-            analysis["error"] = str(e)
-        
-        return analysis
+
     
     def search_logs(
         self,

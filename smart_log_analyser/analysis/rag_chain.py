@@ -12,6 +12,7 @@ from langchain.callbacks.manager import CallbackManagerForRetrieverRun
 from pydantic import Field
 
 from ..vector_store.base import VectorStoreBase
+from .prompt_manager import PromptManager
 
 
 class LogRetriever(BaseRetriever):
@@ -22,7 +23,7 @@ class LogRetriever(BaseRetriever):
     
     class Config:
         arbitrary_types_allowed = True
-    
+        
     def _get_relevant_documents(
         self, 
         query: str, 
@@ -76,8 +77,8 @@ class LogAnalysisRAGChain:
         # Initialize the retriever with keyword arguments
         self.retriever = LogRetriever(vector_store=vector_store, k=3)
         
-        # Initialize prompts
-        self._setup_prompts()
+        # Initialize prompt manager
+        self.prompt_manager = PromptManager()
         
         # Initialize RAG chains
         self._initialize_chains()
@@ -107,133 +108,22 @@ class LogAnalysisRAGChain:
             logger.error(f"Error initializing LLM: {str(e)}")
             raise
     
-    def _setup_prompts(self):
-        """Setup enhanced prompt templates with retrieval context."""
-        
-        # Anomaly Detection Prompt
-        self.anomaly_prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""You are an expert log analyst specializing in anomaly detection. 
-Use the following context from similar historical logs to help analyze the current logs.
 
-HISTORICAL CONTEXT:
-{context}
-
-CURRENT LOGS TO ANALYZE:
-{question}
-
-INSTRUCTIONS:
-1. Carefully examine each log entry for errors, warnings, and anomalies
-2. Pay special attention to:
-   - ERROR and CRITICAL level messages
-   - Database connection issues
-   - Payment processing failures
-   - Memory/disk space warnings
-   - Service timeouts and unavailability
-3. Use the historical context to identify patterns and classify issues accurately
-4. For each issue found, provide severity level and evidence
-
-RESPONSE FORMAT:
-## ANOMALY ANALYSIS
-
-**OVERALL STATUS:** [HEALTHY/WARNING/CRITICAL]
-
-**DETECTED ISSUES:**
-1. **[ISSUE_TYPE]** - Severity: [HIGH/MEDIUM/LOW]
-   - Description: [Brief description]
-   - Evidence: [Specific log entries]
-   - Similar Historical Pattern: [Reference to context if applicable]
-
-**SUMMARY:**
-- Total Issues Found: [NUMBER]
-- Critical Issues: [NUMBER]
-- Immediate Actions Required: [LIST]
-
-Be thorough and accurate. Do not miss obvious errors or warnings."""
-        )
-        
-        # Root Cause Analysis Prompt
-        self.root_cause_prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""You are an expert system administrator performing root cause analysis.
-Use the following context from similar historical incidents to help identify root causes.
-
-HISTORICAL CONTEXT:
-{context}
-
-CURRENT LOGS TO ANALYZE:
-{question}
-
-INSTRUCTIONS:
-1. Identify the primary issues in the logs
-2. Trace the sequence of events leading to problems
-3. Use historical context to identify common root causes
-4. Provide actionable recommendations
-5. **KEEP YOUR RESPONSE CONCISE - MAXIMUM 500 WORDS**
-
-RESPONSE FORMAT:
-## ROOT CAUSE ANALYSIS
-
-**PRIMARY ISSUES:** [List main problems - be brief]
-
-**ROOT CAUSE:** [Primary cause - 1-2 sentences]
-
-**EVIDENCE:** [Key log entries - 2-3 points max]
-
-**RECOMMENDATIONS:** [3-4 key actions - be specific and brief]
-
-Keep it concise and actionable."""
-        )
-        
-        # Log Summary Prompt
-        self.summary_prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""You are an expert log analyst. Provide a comprehensive summary of the logs.
-Use the historical context to better understand patterns and significance.
-
-HISTORICAL CONTEXT:
-{context}
-
-CURRENT LOGS TO ANALYZE:
-{question}
-
-INSTRUCTIONS:
-1. Summarize key events and their significance
-2. Highlight all errors and warnings (don't miss any)
-3. Assess overall system health
-4. Use historical context for better interpretation
-
-RESPONSE FORMAT:
-## LOG SUMMARY
-
-**SYSTEM STATUS:** [HEALTHY/WARNING/CRITICAL]
-
-**KEY EVENTS:**
-- [List significant events with timestamps]
-
-**ERRORS AND WARNINGS:**
-- **Errors:** [Count and types - be specific]
-- **Warnings:** [Count and types - be specific]
-- **Critical Issues:** [Any critical problems]
-
-**PATTERNS OBSERVED:**
-- [Notable patterns or trends]
-
-**RECOMMENDATIONS:**
-- [Key actions needed]
-
-Ensure you identify ALL errors and warnings in the logs."""
-        )
     
     def _initialize_chains(self):
         """Initialize the RAG chains for different analysis types."""
+        
+        # Get prompts from centralized prompt manager
+        anomaly_prompt = self.prompt_manager.get_prompt("rag_anomaly_detection")
+        root_cause_prompt = self.prompt_manager.get_prompt("rag_root_cause")
+        summary_prompt = self.prompt_manager.get_prompt("rag_log_summary")
         
         # Anomaly Detection Chain
         self.anomaly_chain = RetrievalQA.from_chain_type(
             llm=self.llm,
             chain_type="stuff",
             retriever=self.retriever,
-            chain_type_kwargs={"prompt": self.anomaly_prompt},
+            chain_type_kwargs={"prompt": anomaly_prompt},
             return_source_documents=True
         )
         
@@ -242,7 +132,7 @@ Ensure you identify ALL errors and warnings in the logs."""
             llm=self.llm,
             chain_type="stuff",
             retriever=self.retriever,
-            chain_type_kwargs={"prompt": self.root_cause_prompt},
+            chain_type_kwargs={"prompt": root_cause_prompt},
             return_source_documents=True
         )
         
@@ -251,11 +141,11 @@ Ensure you identify ALL errors and warnings in the logs."""
             llm=self.llm,
             chain_type="stuff",
             retriever=self.retriever,
-            chain_type_kwargs={"prompt": self.summary_prompt},
+            chain_type_kwargs={"prompt": summary_prompt},
             return_source_documents=True
         )
         
-        logger.debug("RAG chains initialized successfully")
+        logger.debug("RAG chains initialized successfully with centralized prompts")
     
     def analyze_anomalies(self, logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Perform anomaly detection with RAG."""

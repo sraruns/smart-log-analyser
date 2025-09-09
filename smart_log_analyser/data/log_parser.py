@@ -49,15 +49,18 @@ class LogParser:
 
     def _parse_text_log(self, log_line: str) -> Dict:
         """Parse a text formatted log line."""
-        # Basic pattern for timestamp, level, and message
-        pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[?(\w+)\]? (.*)"
+        # Enhanced pattern to handle various log formats:
+        # 2024-01-15 10:32:45 ERROR: message
+        # 2024-01-15 10:32:45 [ERROR] message  
+        # 2024-01-15 10:32:45 ERROR message
+        pattern = r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[?(\w+)\]?:?\s*(.*)"
         match = re.match(pattern, log_line)
         
         if match:
             timestamp, level, message = match.groups()
             return {
                 "timestamp": timestamp,
-                "level": level,
+                "level": level.upper(),  # Normalize to uppercase
                 "message": message.strip(),
                 "metadata": {}
             }

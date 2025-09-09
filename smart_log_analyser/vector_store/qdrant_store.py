@@ -44,19 +44,24 @@ class QdrantStore(VectorStoreBase):
         self.api_key = qdrant_cfg.get('api_key', None)
         
         # Initialize Qdrant client
-        if self.url:
-            self.client = QdrantClient(url=self.url, api_key=self.api_key)
-        else:
-            self.client = QdrantClient(host=self.host, port=self.port)
-        
-        # Vector dimensions (will be set when first embedding is added)
-        self.vector_size = qdrant_cfg.get('vector_size', 384)  # Default for sentence-transformers
-        
-        # Store config hash for change detection
-        self.config_hash = self._generate_config_hash(config)
-        
-        # Initialize collection if it doesn't exist
-        self._ensure_collection_exists()
+        try:
+            if self.url:
+                self.client = QdrantClient(url=self.url, api_key=self.api_key)
+            else:
+                self.client = QdrantClient(host=self.host, port=self.port)
+            
+            # Vector dimensions (will be set when first embedding is added)
+            self.vector_size = qdrant_cfg.get('vector_size', 384)  # Default for sentence-transformers
+            
+            # Store config hash for change detection
+            self.config_hash = self._generate_config_hash(config)
+            
+            # Initialize collection if it doesn't exist (test connection)
+            self._ensure_collection_exists()
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Qdrant client: {str(e)}")
+            raise ConnectionError(f"Cannot connect to Qdrant server: {str(e)}")
     
     def _generate_config_hash(self, config: Dict) -> str:
         """Generate a hash of relevant config settings."""

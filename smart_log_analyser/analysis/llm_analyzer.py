@@ -4,8 +4,9 @@ import os
 from loguru import logger
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
-
 from .prompt_manager import PromptManager
+
+
 
 
 class LLMAnalyzer:
@@ -85,7 +86,7 @@ class LLMAnalyzer:
     def _setup_prompts(self):
         """Setup prompt manager for handling templates."""
         self.prompt_manager = PromptManager()
-        logger.debug("Prompt manager configured with default templates")
+        logger.debug("Prompt manager configured with centralized templates")
     
     def analyze_logs(self, logs: List[Dict[str, Any]], analysis_type: str = "anomaly_detection") -> Dict[str, Any]:
         """
@@ -112,7 +113,7 @@ class LLMAnalyzer:
                 return {
                     "status": "error",
                     "message": f"Unknown analysis type: {analysis_type}",
-                    "available_types": self.prompt_manager.list_available_prompts()
+                    "available_types": self.prompt_manager.list_basic_prompts()
                 }
             
             # Limit logs for concise analysis (max 20 entries)
@@ -127,6 +128,8 @@ class LLMAnalyzer:
             # Create prompt with logs
             formatted_prompt = prompt.format(logs=formatted_logs)
             
+            print(f"formatted_prompt: {formatted_prompt}")
+
             # Get LLM response
             response = self._get_llm_response(formatted_prompt)
             
@@ -166,11 +169,17 @@ class LLMAnalyzer:
                 level = log.get("level", "INFO")
                 message = log.get("message", log.get("content", ""))
                 
-                # Keep it concise - just essential info
-                formatted_log = f"{i}. [{level}] {message}"
+                # Include timestamp and clearer formatting for better LLM analysis
+                formatted_log = f"{i}. {timestamp} [{level}] {message}"
                 formatted_logs.append(formatted_log)
+                
+                # Debug: check if we have parsed logs correctly
+                if i <= 3:  # Log first few entries for debugging
+                    logger.debug(f"Formatted log {i}: {formatted_log}")
             
-            return "\n".join(formatted_logs)
+            result = "\n".join(formatted_logs)
+            logger.debug(f"Total formatted logs for LLM analysis: {len(formatted_logs)}")
+            return result
             
         except Exception as e:
             logger.error(f"Error formatting logs: {str(e)}")
@@ -216,13 +225,13 @@ class LLMAnalyzer:
             "top_p": self.top_p,
             "top_k": self.top_k,
             "safety_settings": "disabled",
-            "available_analysis_types": self.prompt_manager.list_available_prompts(),
+            "available_analysis_types": self.prompt_manager.list_basic_prompts(),
             "prompt_info": self.prompt_manager.get_prompt_info()
         }
     
     def get_available_analysis_types(self) -> List[str]:
         """Get list of available analysis types."""
-        return self.prompt_manager.list_available_prompts()
+        return self.prompt_manager.list_basic_prompts()
     
     def add_custom_analysis_type(self, name: str, template: str, input_variables: List[str] = None) -> bool:
         """
