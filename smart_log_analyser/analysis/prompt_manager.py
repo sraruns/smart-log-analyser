@@ -5,38 +5,48 @@ from loguru import logger
 
 class PromptManager:
     """
-    Centralized prompt management for log analysis tasks.
+    Centralized prompt management for all log analysis tasks.
     
     Features:
-    - Modular prompt templates
+    - Unified prompt storage for basic LLM and RAG analysis
     - Easy customization and extension
     - Consistent formatting across analysis types
     - Template validation and error handling
     """
     
     def __init__(self):
-        """Initialize the prompt manager with default templates."""
+        """Initialize the prompt manager with all analysis templates."""
         self.prompts = {}
-        self._setup_default_prompts()
-        logger.debug("Prompt manager initialized with default templates")
+        self._setup_basic_prompts()
+        self._setup_rag_prompts()
+        logger.debug("Prompt manager initialized with all templates")
     
-    def _setup_default_prompts(self):
-        """Setup default prompt templates for log analysis."""
+    def _setup_basic_prompts(self):
+        """Setup basic prompt templates for simple LLM analysis."""
         
-        # Anomaly Detection Prompt
+        # Basic Anomaly Detection Prompt
         self.prompts["anomaly_detection"] = PromptTemplate(
             input_variables=["logs"],
-            template="""Analyze these logs for anomalies. Provide CONCISE key insights only:
+            template="""Analyze these logs for anomalies and issues. Look specifically for:
+- ERROR level messages
+- WARNING level messages  
+- CRITICAL level messages
+- Failed operations
+- Timeouts and connection issues
+- Resource problems (memory, disk space)
 
+LOGS TO ANALYZE:
 {logs}
 
 Format response as:
-ANOMALIES: [List 2-3 key issues with severity: HIGH/MEDIUM/LOW]
-PATTERNS: [1-2 notable patterns]
-ACTIONS: [1-2 immediate actions needed]"""
+ANOMALIES: [List each ERROR/WARNING/CRITICAL found with severity: HIGH/MEDIUM/LOW]
+PATTERNS: [Notable patterns like repeated errors, escalating issues]
+ACTIONS: [Immediate actions needed based on the issues found]
+
+Be thorough - do not miss any ERROR, WARNING, or CRITICAL entries."""
         )
         
-        # Root Cause Analysis Prompt
+        # Basic Root Cause Analysis Prompt
         self.prompts["root_cause"] = PromptTemplate(
             input_variables=["logs"],
             template="""Identify root causes in these logs. Be CONCISE:
@@ -50,18 +60,26 @@ EVIDENCE: [Key supporting log entries]
 FIX: [Primary recommended action]"""
         )
         
-        # Log Summary Prompt
+        # Basic Log Summary Prompt
         self.prompts["log_summary"] = PromptTemplate(
             input_variables=["logs"],
-            template="""Summarize these logs concisely:
+            template="""Summarize these logs and identify all issues:
 
 {logs}
 
+Carefully examine EVERY log entry and identify:
+- All ERROR entries and their details
+- All WARNING entries and their details  
+- All CRITICAL entries and their details
+- System status based on the severity of issues found
+
 Format response as:
-STATUS: [HEALTHY/WARNING/CRITICAL]
-KEY EVENTS: [2-3 most important events]
-ERRORS: [Count and types]
-RECOMMENDATIONS: [1-2 key actions]"""
+STATUS: [HEALTHY if no errors/warnings, WARNING if warnings present, CRITICAL if errors/critical present]
+KEY EVENTS: [List the most important events, especially errors and warnings]
+ISSUES: [List EVERY error and warning found - be comprehensive]
+ACTIONS: [Recommended actions based on the issues identified]
+
+Do not miss any ERROR, WARNING, or CRITICAL log entries."""
         )
         
         # Performance Analysis Prompt
@@ -77,19 +95,123 @@ BOTTLENECKS: [Identified performance issues]
 METRICS: [Key performance indicators found]
 OPTIMIZATION: [Performance improvement suggestions]"""
         )
+    
+    def _setup_rag_prompts(self):
+        """Setup enhanced RAG prompt templates with context integration."""
         
-        # Security Analysis Prompt
-        self.prompts["security_analysis"] = PromptTemplate(
-            input_variables=["logs"],
-            template="""Analyze these logs for security concerns:
+        # RAG Anomaly Detection Prompt
+        self.prompts["rag_anomaly_detection"] = PromptTemplate(
+            input_variables=["context", "question"],
+            template="""You are an expert log analyst specializing in anomaly detection. 
+Use the following context from similar historical logs to help analyze the current logs.
 
-{logs}
+HISTORICAL CONTEXT:
+{context}
 
-Format response as:
-SECURITY STATUS: [SECURE/SUSPICIOUS/CRITICAL]
-THREATS: [Potential security issues identified]
-INDICATORS: [Security-related log patterns]
-RESPONSE: [Recommended security actions]"""
+CURRENT LOGS TO ANALYZE:
+{question}
+
+INSTRUCTIONS:
+1. Carefully examine each log entry for errors, warnings, and anomalies
+2. Pay special attention to:
+   - ERROR and CRITICAL level messages
+   - Database connection issues
+   - Payment processing failures
+   - Memory/disk space warnings
+   - Service timeouts and unavailability
+3. Use the historical context to identify patterns and classify issues accurately
+4. For each issue found, provide severity level and evidence
+
+RESPONSE FORMAT:
+## ANOMALY ANALYSIS
+
+**OVERALL STATUS:** [HEALTHY/WARNING/CRITICAL]
+
+**DETECTED ISSUES:**
+1. **[ISSUE_TYPE]** - Severity: [HIGH/MEDIUM/LOW]
+   - Description: [Brief description]
+   - Evidence: [Specific log entries]
+   - Similar Historical Pattern: [Reference to context if applicable]
+
+**SUMMARY:**
+- Total Issues Found: [NUMBER]
+- Critical Issues: [NUMBER]
+- Immediate Actions Required: [LIST]
+
+Be thorough and accurate. Do not miss obvious errors or warnings."""
+        )
+        
+        # RAG Root Cause Analysis Prompt
+        self.prompts["rag_root_cause"] = PromptTemplate(
+            input_variables=["context", "question"],
+            template="""You are an expert system administrator performing root cause analysis.
+Use the following context from similar historical incidents to help identify root causes.
+
+HISTORICAL CONTEXT:
+{context}
+
+CURRENT LOGS TO ANALYZE:
+{question}
+
+INSTRUCTIONS:
+1. Identify the primary issues in the logs
+2. Trace the sequence of events leading to problems
+3. Use historical context to identify common root causes
+4. Provide actionable recommendations
+5. **KEEP YOUR RESPONSE CONCISE - MAXIMUM 500 WORDS**
+
+RESPONSE FORMAT:
+## ROOT CAUSE ANALYSIS
+
+**PRIMARY ISSUES:** [List main problems - be brief]
+
+**ROOT CAUSE:** [Primary cause - 1-2 sentences]
+
+**EVIDENCE:** [Key log entries - 2-3 points max]
+
+**RECOMMENDATIONS:** [3-4 key actions - be specific and brief]
+
+Keep it concise and actionable."""
+        )
+        
+        # RAG Log Summary Prompt
+        self.prompts["rag_log_summary"] = PromptTemplate(
+            input_variables=["context", "question"],
+            template="""You are an expert log analyst. Provide a comprehensive summary of the logs.
+Use the historical context to better understand patterns and significance.
+
+HISTORICAL CONTEXT:
+{context}
+
+CURRENT LOGS TO ANALYZE:
+{question}
+
+INSTRUCTIONS:
+1. Summarize key events and their significance
+2. Highlight all errors and warnings (don't miss any)
+3. Assess overall system health
+4. Use historical context for better interpretation
+
+RESPONSE FORMAT:
+## LOG SUMMARY
+
+**SYSTEM STATUS:** [HEALTHY/WARNING/CRITICAL]
+
+**KEY EVENTS:**
+- [List significant events with timestamps]
+
+**ERRORS AND WARNINGS:**
+- **Errors:** [Count and types - be specific]
+- **Warnings:** [Count and types - be specific]
+- **Critical Issues:** [Any critical problems]
+
+**PATTERNS OBSERVED:**
+- [Notable patterns or trends]
+
+**RECOMMENDATIONS:**
+- [Key actions needed]
+
+Ensure you identify ALL errors and warnings in the logs."""
         )
     
     def get_prompt(self, analysis_type: str) -> Optional[PromptTemplate]:
@@ -97,7 +219,7 @@ RESPONSE: [Recommended security actions]"""
         Get a prompt template for the specified analysis type.
         
         Args:
-            analysis_type: Type of analysis (e.g., 'anomaly_detection', 'root_cause')
+            analysis_type: Type of analysis (e.g., 'anomaly_detection', 'rag_anomaly_detection')
             
         Returns:
             PromptTemplate object or None if not found
@@ -145,13 +267,21 @@ RESPONSE: [Recommended security actions]"""
         """
         return list(self.prompts.keys())
     
-    def format_prompt(self, analysis_type: str, logs: str) -> Optional[str]:
+    def list_basic_prompts(self) -> List[str]:
+        """Get list of basic (non-RAG) prompt templates."""
+        return [name for name in self.prompts.keys() if not name.startswith('rag_')]
+    
+    def list_rag_prompts(self) -> List[str]:
+        """Get list of RAG prompt templates."""
+        return [name for name in self.prompts.keys() if name.startswith('rag_')]
+    
+    def format_prompt(self, analysis_type: str, **kwargs) -> Optional[str]:
         """
-        Format a prompt with the provided logs.
+        Format a prompt with the provided variables.
         
         Args:
             analysis_type: Type of analysis prompt
-            logs: Formatted log string
+            **kwargs: Variables to format the prompt with
             
         Returns:
             Formatted prompt string or None if template not found
@@ -161,7 +291,7 @@ RESPONSE: [Recommended security actions]"""
             return None
         
         try:
-            return prompt_template.format(logs=logs)
+            return prompt_template.format(**kwargs)
         except Exception as e:
             logger.error(f"Error formatting prompt '{analysis_type}': {str(e)}")
             return None
@@ -181,9 +311,13 @@ RESPONSE: [Recommended security actions]"""
             return False
         
         try:
-            # Test format with dummy data
-            test_logs = "Test log entry"
-            prompt_template.format(logs=test_logs)
+            # Test format with dummy data based on input variables
+            if 'context' in prompt_template.input_variables:
+                # RAG prompt
+                prompt_template.format(context="Test context", question="Test logs")
+            else:
+                # Basic prompt
+                prompt_template.format(logs="Test log entry")
             return True
         except Exception as e:
             logger.error(f"Prompt validation failed for '{analysis_type}': {str(e)}")
@@ -196,9 +330,15 @@ RESPONSE: [Recommended security actions]"""
         Returns:
             Dictionary with prompt information
         """
+        basic_prompts = self.list_basic_prompts()
+        rag_prompts = self.list_rag_prompts()
+        
         return {
             "total_prompts": len(self.prompts),
+            "basic_prompts": basic_prompts,
+            "rag_prompts": rag_prompts,
             "available_types": list(self.prompts.keys()),
-            "default_input_variables": ["logs"],
+            "basic_input_variables": ["logs"],
+            "rag_input_variables": ["context", "question"],
             "custom_prompts_supported": True
         }

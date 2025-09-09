@@ -22,7 +22,7 @@ embedding:
 
 # Vector Store Configuration
 vector_store:
-  type: "auto"  # Options: "chroma", "qdrant", "auto" (prefers Qdrant)
+  type: "chroma"  # Options: "chroma", "qdrant", "auto" (prefers Qdrant)
   collection_name: "log_embeddings"
   persist_directory: "./data/vector_store"
   version: "1.0.0"

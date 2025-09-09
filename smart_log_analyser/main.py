@@ -23,9 +23,10 @@ sys.path.insert(0, os.path.abspath('.'))
 
 from smart_log_analyser.core.smart_log_analyzer import SmartLogAnalyzer
 from smart_log_analyser.analysis.rag_chain import LogAnalysisRAGChain
+from smart_log_analyser.data.sample_logs import SampleLogs
 
 
-def demonstrate_rag_enhanced_analysis():
+def demonstrate_rag_enhanced_analysis(sample_logs):
     """Demonstrate the RAG-enhanced Smart Log Analyzer."""
     try:
         logger.info("=== RAG-Enhanced Smart Log Analyzer Demo ===")
@@ -33,70 +34,11 @@ def demonstrate_rag_enhanced_analysis():
         # Initialize analyzer
         analyzer = SmartLogAnalyzer("config/config.yaml")
         
-        # Sample log data with various issues (structured format)
-        sample_logs_dict = [
-            {
-                "timestamp": "2024-01-15 10:30:15",
-                "level": "INFO",
-                "message": "Application started successfully"
-            },
-            {
-                "timestamp": "2024-01-15 10:30:16",
-                "level": "INFO",
-                "message": "Database connection established"
-            },
-            {
-                "timestamp": "2024-01-15 10:31:22",
-                "level": "WARNING",
-                "message": "High memory usage detected: 85% of 8GB used"
-            },
-            {
-                "timestamp": "2024-01-15 10:32:45",
-                "level": "ERROR",
-                "message": "Failed to process payment request: Invalid card number"
-            },
-            {
-                "timestamp": "2024-01-15 10:33:12",
-                "level": "INFO",
-                "message": "User login successful for user@example.com"
-            },
-            {
-                "timestamp": "2024-01-15 10:34:28",
-                "level": "WARNING",
-                "message": "Disk space low: 95% full on /var/log partition"
-            },
-            {
-                "timestamp": "2024-01-15 10:35:44",
-                "level": "ERROR",
-                "message": "Service unavailable: Downstream service timeout"
-            },
-            {
-                "timestamp": "2024-01-15 10:36:15",
-                "level": "INFO",
-                "message": "Cache cleared successfully"
-            },
-            {
-                "timestamp": "2024-01-15 10:37:22",
-                "level": "CRITICAL",
-                "message": "Database connection lost - attempting reconnection"
-            },
-            {
-                "timestamp": "2024-01-15 10:38:01",
-                "level": "INFO",
-                "message": "User logout successful for user@example.com"
-            }
-        ]
-        
-        # Convert to string format for processing
-        sample_logs = []
-        for log_dict in sample_logs_dict:
-            log_string = f"{log_dict['timestamp']} {log_dict['level']}: {log_dict['message']}"
-            sample_logs.append(log_string)
-        
+
         logger.info(f"📝 Processing {len(sample_logs)} sample log entries...")
         
-        # First, process logs to populate the vector store
-        result = analyzer.process_logs(sample_logs, analyze=False)
+        # First, process logs to populate the vector store (for RAG)
+        result = analyzer.process_logs_for_vector_storage(sample_logs)
         
         if result["status"] == "success":
             logger.info(f"✅ Processed {result['processed_logs']} logs into {result['chunks_created']} chunks")
@@ -127,97 +69,15 @@ def demonstrate_rag_enhanced_analysis():
             logger.info("🚀 Continuing with basic analysis (without RAG)...")
             return True
         
+     
         # Create RAG chain
         rag_chain = LogAnalysisRAGChain(analyzer.vector_store, llm_config)
         
         logger.info("✅ RAG Chain initialized successfully")
         
-        # Demonstrate RAG-Enhanced Analysis
-        logger.info("\n🧠 Running RAG-Enhanced Analysis:")
+        # Run RAG analysis demo
+        run_rag_analysis_demo(rag_chain, analyzer, sample_logs)
         
-        # Test 1: Anomaly Detection with RAG
-        logger.info("\n  1. 🔍 Anomaly Detection Analysis:")
-        try:
-            anomaly_result = rag_chain.analyze_anomalies(sample_logs_dict)
-            if anomaly_result["status"] == "success":
-                logger.info("     ✅ Anomaly detection completed")
-                logger.info(f"     📋 Analysis type: {anomaly_result['analysis_type']}")
-                logger.info(f"     📊 Analyzed {anomaly_result['log_count']} log entries")
-                logger.info(f"     🤖 Model used: {anomaly_result['model_used']}")
-                logger.info(f"     📚 Retrieved {len(anomaly_result.get('source_documents', []))} context documents")
-                
-                # Display the analysis result
-                print("\n" + "="*80)
-                print("ANOMALY DETECTION RESULTS:")
-                print("="*80)
-                print(anomaly_result["analysis"])
-                print("="*80 + "\n")
-                
-            else:
-                logger.warning(f"     ⚠️ Anomaly detection failed: {anomaly_result.get('message', 'Unknown error')}")
-        except Exception as e:
-            logger.error(f"     ❌ Anomaly detection error: {str(e)}")
-        
-        # Test 2: Root Cause Analysis with RAG
-        logger.info("  2. 🔍 Root Cause Analysis:")
-        try:
-            root_cause_result = rag_chain.analyze_root_cause(sample_logs_dict)
-            if root_cause_result["status"] == "success":
-                logger.info("     ✅ Root cause analysis completed")
-                logger.info(f"     📋 Analysis type: {root_cause_result['analysis_type']}")
-                logger.info(f"     📊 Analyzed {root_cause_result['log_count']} log entries")
-                logger.info(f"     📚 Retrieved {len(root_cause_result.get('source_documents', []))} context documents")
-                
-                # Display the analysis result
-                print("\n" + "="*80)
-                print("ROOT CAUSE ANALYSIS RESULTS:")
-                print("="*80)
-                print(root_cause_result["analysis"])
-                print("="*80 + "\n")
-                
-            else:
-                logger.warning(f"     ⚠️ Root cause analysis failed: {root_cause_result.get('message', 'Unknown error')}")
-        except Exception as e:
-            logger.error(f"     ❌ Root cause analysis error: {str(e)}")
-        
-        # Test 3: Log Summary with RAG
-        logger.info("  3. 📋 Log Summary Analysis:")
-        try:
-            summary_result = rag_chain.summarize_logs(sample_logs_dict)
-            if summary_result["status"] == "success":
-                logger.info("     ✅ Log summary completed")
-                logger.info(f"     📋 Analysis type: {summary_result['analysis_type']}")
-                logger.info(f"     📊 Analyzed {summary_result['log_count']} log entries")
-                logger.info(f"     📚 Retrieved {len(summary_result.get('source_documents', []))} context documents")
-                
-                # Display the analysis result
-                print("\n" + "="*80)
-                print("LOG SUMMARY RESULTS:")
-                print("="*80)
-                print(summary_result["analysis"])
-                print("="*80 + "\n")
-                
-            else:
-                logger.warning(f"     ⚠️ Log summary failed: {summary_result.get('message', 'Unknown error')}")
-        except Exception as e:
-            logger.error(f"     ❌ Log summary error: {str(e)}")
-        
-        # Display final statistics
-        logger.info("📈 Final Statistics:")
-        stats = analyzer.get_stats()
-        vector_stats = stats.get("vector_store", {})
-        embedding_stats = stats.get("embedding_model", {})
-        
-        logger.info(f"   Total embeddings: {vector_stats.get('total_embeddings', 'Unknown')}")
-        logger.info(f"   Vector store version: {vector_stats.get('version', 'Unknown')}")
-        logger.info(f"   Last updated: {vector_stats.get('last_updated', 'Unknown')}")
-        
-        logger.info("🤖 Embedding Model Information:")
-        logger.info(f"   Current model: {embedding_stats.get('model_name', 'Unknown')}")
-        logger.info(f"   Model type: {embedding_stats.get('type', 'Unknown')}")
-        logger.info(f"   Dimension: {embedding_stats.get('dimension', 'Unknown')}")
-        
-        logger.info("✅ RAG-enhanced demo completed successfully!")
         return True
         
     except Exception as e:
@@ -225,6 +85,136 @@ def demonstrate_rag_enhanced_analysis():
         import traceback
         traceback.print_exc()
         return False
+
+def run_basic_llm_analysis(analyzer, sample_logs):
+    """Run basic LLM analysis without RAG."""
+    logger.info("\n🔍 Running Basic LLM Analysis (no RAG):")
+    basic_analysis_result = analyzer.analyze_logs_with_llm(
+        sample_logs, 
+        analysis_types=["anomaly_detection", "log_summary"]
+    )
+    
+    if basic_analysis_result["status"] == "success":
+        logger.info("✅ Basic LLM analysis completed")
+        logger.info(f"📊 Analyzed {basic_analysis_result['processed_logs']} log entries")
+        logger.info(f"🔧 Analysis types: {basic_analysis_result['analysis_types']}")
+        
+        # Show basic analysis results
+        print("\n" + "="*80)
+        print("BASIC LLM ANALYSIS RESULTS (NO RAG):")
+        print("="*80)
+        for analysis_type, result in basic_analysis_result["analysis"].items():
+            if result.get("status") == "success":
+                print(f"\n--- {analysis_type.upper()} ---")
+                print(result["analysis"])
+        print("="*80 + "\n")
+    else:
+        logger.warning(f"⚠️ Basic analysis failed: {basic_analysis_result.get('message', 'Unknown error')}")
+
+def run_rag_analysis_demo(rag_chain, analyzer, sample_logs):
+    """Run demonstration of RAG-enhanced analysis capabilities."""
+    # Demonstrate RAG-Enhanced Analysis
+    logger.info("\n🧠 Running RAG-Enhanced Analysis (with historical context):")
+    
+    # Convert string logs to dict format for RAG analysis
+    sample_logs_dict = []
+    for log_line in sample_logs:
+        # Parse the string format: "timestamp level: message"
+        parts = log_line.split(" ", 2)
+        if len(parts) >= 3:
+            timestamp = f"{parts[0]} {parts[1]}"
+            level_and_message = parts[2]
+            if ":" in level_and_message:
+                level, message = level_and_message.split(":", 1)
+                sample_logs_dict.append({
+                    "timestamp": timestamp,
+                    "level": level.strip(),
+                    "message": message.strip()
+                })
+    
+    # Test 1: Anomaly Detection with RAG
+    logger.info("\n  1. 🔍 Anomaly Detection Analysis:")
+    try:
+        anomaly_result = rag_chain.analyze_anomalies(sample_logs_dict)
+        if anomaly_result["status"] == "success":
+            logger.info("     ✅ Anomaly detection completed")
+            logger.info(f"     📋 Analysis type: {anomaly_result['analysis_type']}")
+            logger.info(f"     📊 Analyzed {anomaly_result['log_count']} log entries")
+            logger.info(f"     🤖 Model used: {anomaly_result['model_used']}")
+            logger.info(f"     📚 Retrieved {len(anomaly_result.get('source_documents', []))} context documents")
+            
+            # Display the analysis result
+            print("\n" + "="*80)
+            print("ANOMALY DETECTION RESULTS:")
+            print("="*80)
+            print(anomaly_result["analysis"])
+            print("="*80 + "\n")
+            
+        else:
+            logger.warning(f"     ⚠️ Anomaly detection failed: {anomaly_result.get('message', 'Unknown error')}")
+    except Exception as e:
+        logger.error(f"     ❌ Anomaly detection error: {str(e)}")
+    
+    # Test 2: Root Cause Analysis with RAG
+    logger.info("  2. 🔍 Root Cause Analysis:")
+    try:
+        root_cause_result = rag_chain.analyze_root_cause(sample_logs_dict)
+        if root_cause_result["status"] == "success":
+            logger.info("     ✅ Root cause analysis completed")
+            logger.info(f"     📋 Analysis type: {root_cause_result['analysis_type']}")
+            logger.info(f"     📊 Analyzed {root_cause_result['log_count']} log entries")
+            logger.info(f"     📚 Retrieved {len(root_cause_result.get('source_documents', []))} context documents")
+            
+            # Display the analysis result
+            print("\n" + "="*80)
+            print("ROOT CAUSE ANALYSIS RESULTS:")
+            print("="*80)
+            print(root_cause_result["analysis"])
+            print("="*80 + "\n")
+            
+        else:
+            logger.warning(f"     ⚠️ Root cause analysis failed: {root_cause_result.get('message', 'Unknown error')}")
+    except Exception as e:
+        logger.error(f"     ❌ Root cause analysis error: {str(e)}")
+    
+    # Test 3: Log Summary with RAG
+    logger.info("  3. 📋 Log Summary Analysis:")
+    try:
+        summary_result = rag_chain.summarize_logs(sample_logs_dict)
+        if summary_result["status"] == "success":
+            logger.info("     ✅ Log summary completed")
+            logger.info(f"     📋 Analysis type: {summary_result['analysis_type']}")
+            logger.info(f"     📊 Analyzed {summary_result['log_count']} log entries")
+            logger.info(f"     📚 Retrieved {len(summary_result.get('source_documents', []))} context documents")
+            
+            # Display the analysis result
+            print("\n" + "="*80)
+            print("LOG SUMMARY RESULTS:")
+            print("="*80)
+            print(summary_result["analysis"])
+            print("="*80 + "\n")
+            
+        else:
+            logger.warning(f"     ⚠️ Log summary failed: {summary_result.get('message', 'Unknown error')}")
+    except Exception as e:
+        logger.error(f"     ❌ Log summary error: {str(e)}")
+    
+    # Display final statistics
+    logger.info("📈 Final Statistics:")
+    stats = analyzer.get_stats()
+    vector_stats = stats.get("vector_store", {})
+    embedding_stats = stats.get("embedding_model", {})
+    
+    logger.info(f"   Total embeddings: {vector_stats.get('total_embeddings', 'Unknown')}")
+    logger.info(f"   Vector store version: {vector_stats.get('version', 'Unknown')}")
+    logger.info(f"   Last updated: {vector_stats.get('last_updated', 'Unknown')}")
+    
+    logger.info("🤖 Embedding Model Information:")
+    logger.info(f"   Current model: {embedding_stats.get('model_name', 'Unknown')}")
+    logger.info(f"   Model type: {embedding_stats.get('type', 'Unknown')}")
+    logger.info(f"   Dimension: {embedding_stats.get('dimension', 'Unknown')}")
+    
+    logger.info("✅ RAG-enhanced demo completed successfully!")
 
 
 def demonstrate_embedding_comparison():
@@ -252,8 +242,21 @@ def main():
     try:
         logger.info("🚀 Starting RAG-Enhanced Smart Log Analyzer Demo...")
         
+        # Initialize analyzer
+        analyzer = SmartLogAnalyzer("config/config.yaml")
+      
+        # Get sample logs from SampleLogs class
+        sample_logs = SampleLogs.get_sample_logs()
+
+        elasticsearch_logs = SampleLogs.get_logs_from_elasticsearch(None, "logs-*", 1000, "1h")
+
+        logs_to_analyze = elasticsearch_logs
+
+        # Run basic LLM analysis
+        run_basic_llm_analysis(analyzer, logs_to_analy)
+
         # Run main demonstration
-        demo_success = demonstrate_rag_enhanced_analysis()
+        demo_success = demonstrate_rag_enhanced_analysis(logs_to_analyze)
         
         # Run embedding comparison
         comparison_success = demonstrate_embedding_comparison()
